@@ -4,7 +4,7 @@
 # init conditions for inv_0 and q_0
 
 
-price # T x B matrix
+price # T x B mat
 
 data_h = NULL
 for (h in 1:H) {
