@@ -1,19 +1,43 @@
 ### Basic Version of Promotion Effects - Neslin, van Heerde (2009) w/o any stockpiling other effects
 
-
+library(bayesm)
 library(data.table)
+library(magrittr)
+library(ggplot2)
+library(data.table)
+
+#Function to create price matrix - from dataset orangejuice from bayesm package
+PriceMatrix <- function(){
+  data("orangeJuice")
+  oj = data.table(orangeJuice$yx)
+  
+  # we only use 64 oz package sizes and multiple price by 64 becasue raw prices are per oz.
+  prices64 = oj[store == 5 & brand == 1, .(week = 1:.N,
+                                           p_trp = price1, p_fn = price3, 
+                                           p_tr = price4, p_mm = price5, 
+                                           p_ch = price7, p_tf = price8, 
+                                           p_fg = price9, p_dm = price10)] %>%
+    .[, lapply(.SD, function(x) round(64 * x, 2)), by = week]
+  
+  
+  prices64 <- as.matrix(prices64[,2:9])
+  return(prices64)
+}
+
 #Truncated Poisson
 rztpois2 = function(n, lambda, q = 1:30) {
   pztpoisson = lambda^q / (expm1(lambda) * gamma(q + 1))
   sample(q, n, prob = pztpoisson, replace = TRUE) 
 }
 
+#Function to Update Inventory
 UpdateInventory <- function(inv, q, avg_cons){
   cons=min(inv, avg_cons)
   inv=inv+q-cons
   return(inv)
 }
 
+#Function to Sample Incidence
 SampleIncidence <- function(gamma0, gamma2, gamma3, inv, avg_cons)
 {
   util= gamma0+gamma2*avg_cons+gamma3*inv
@@ -22,12 +46,14 @@ SampleIncidence <- function(gamma0, gamma2, gamma3, inv, avg_cons)
   return(incidence)
 }
 
+#Function to Sample Quantity
 SampleQuantity <- function(phi0)
 {
   q=rztpois2(1, phi0)
   return(q)
 }
 
+#Function to Sample Brand Choice
 SampleBrandChoice <- function(beta0,beta1,price)
 {
   utility= beta0+beta1*price
@@ -36,27 +62,13 @@ SampleBrandChoice <- function(beta0,beta1,price)
   return(b)  #Returning the position
 }
 
-#This could go as a function
-price <- as.matrix(prices64[,2:9])
 
-set.seed(40)
-H=3
+PromotionEffects <- function(H,
+                             inv0, q0, avg_cons,
+                             gamma0, gamma2, gamma3,
+                             beta0, beta1, phi0){
+price<-PriceMatrix()
 W=nrow(price)
-inv0 = 2 
-q0 = 0
-avg_cons = 0.5
-gamma0  = 0.1
-gamma2 = 0.1
-gamma3 = -1
-beta0=rnorm(8, mean=2, sd=0.3)
-beta1=-1
-phi0=2
-
-# Add function for the prices from orange juice table as a function (basem - all weeks)
-# give actual/relatively close beta0 values so.. MNL can be estimated. 
-#function ( #add parameters + price ){close it, return datatable}
-
-
 data_ht=NULL
 pos=1
 for(h in 1:H) {
@@ -78,9 +90,15 @@ for(h in 1:H) {
   }
 }
 datamain=rbindlist(data_ht)
+return(datamain)
+}
 
- 
-  
-
+set.seed(40)
+data <- PromotionEffects(H=3, 
+                         inv0 = 2, q0 = 0, avg_cons = 0.5,
+                         gamma0=0, gamma2=0.1, gamma3 = -0.1,
+                         beta0=rnorm(8, mean=2, sd=0.3),
+                         beta1=-1,
+                         phi0=2)
 
 
