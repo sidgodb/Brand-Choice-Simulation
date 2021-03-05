@@ -83,7 +83,7 @@ for(h in 1:H) {
       b=SampleBrandChoice(beta0, beta1, price[w,])
       br = BrandNames[b]
       q=SampleQuantity(phi0)
-      data_ht[[pos]]=data.table(h=h, w=w, b=b, br=as.character(br) ,q=q, price_per_unit=price[w,b])
+      data_ht[[pos]]=data.table(h=h, w=w, b=b,brandname=as.character(br) ,q=q, price_per_unit=price[w,b])
     }
     if(i==0)
     {
@@ -97,11 +97,11 @@ return(datamain)
 }
 
 set.seed(40)
-data <- PromotionEffects(H=3, 
-                         inv0 = 2, q0 = 0, avg_cons = 0.5,
-                         gamma0=0, gamma2=0.1, gamma3 = -0.1,
-                         beta0=rnorm(8, mean=2, sd=0.3),
+data <- PromotionEffects(H=100, 
+                         inv0 = 2.5, q0 = 0, avg_cons = 0.52,
+                         gamma0=0, gamma2=0.1, gamma3 = -0.12,
+                         beta0=c(0,-1,-2,-3,-4,-5,-6,-7),
                          beta1=-1,
-                         phi0=2)
+                         phi0=4)
 
 
