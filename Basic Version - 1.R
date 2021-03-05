@@ -10,15 +10,15 @@ library(data.table)
 PriceMatrix <- function(){
   data("orangeJuice")
   oj = data.table(orangeJuice$yx)
+  orangeJuice<-0
   
-  # we only use 64 oz package sizes and multiple price by 64 becasue raw prices are per oz.
+  # we only use 64 oz package sizes and multiple price by 64 because raw prices are per oz.
   prices64 = oj[store == 5 & brand == 1, .(week = 1:.N,
                                            p_trp = price1, p_fn = price3, 
                                            p_tr = price4, p_mm = price5, 
                                            p_ch = price7, p_tf = price8, 
                                            p_fg = price9, p_dm = price10)] %>%
     .[, lapply(.SD, function(x) round(64 * x, 2)), by = week]
-  
   
   prices64 <- as.matrix(prices64[,2:9])
   return(prices64)
@@ -68,6 +68,8 @@ PromotionEffects <- function(H,
                              gamma0, gamma2, gamma3,
                              beta0, beta1, phi0){
 price<-PriceMatrix()
+BrandNames <- c("Tropicana Premium","Florida's Natural","Tropicana",
+                "Minute Maid","Citrus Hill" ,"Tree Fresh","Florida Gold","Dominicks")
 W=nrow(price)
 data_ht=NULL
 pos=1
@@ -79,8 +81,9 @@ for(h in 1:H) {
     i=SampleIncidence(gamma0, gamma2, gamma3, inv, avg_cons)
     if(i==1){
       b=SampleBrandChoice(beta0, beta1, price[w,])
+      br = BrandNames[b]
       q=SampleQuantity(phi0)
-      data_ht[[pos]]=data.table(h=h, w=w, b=b,q=q)
+      data_ht[[pos]]=data.table(h=h, w=w, b=b, br=as.character(br) ,q=q, price_per_unit=price[w,b])
     }
     if(i==0)
     {
