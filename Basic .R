@@ -118,13 +118,15 @@ PromotionEffects <- function(seed,
 }
 
 
-data <- PromotionEffects(seed=40,H=1500, W=104, StrNum = 5,
+data <- PromotionEffects(seed=40,H=10000, W=52, StrNum = 5,
                          inv0 = 2.5, q0 = 0, avg_cons = 0.52,
                          gamma0=0, gamma2=0.1, gamma3 = -0.12,
-                         beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
+                         beta0=c(0,-0.5,-0.72,-1.42,-1.59,-2,-2.1,-2.7),
                          beta1=-1,
-                         phi0=4)
+                         phi0=0.25)
 
+setwd("/Users/Siddharth/Documents/")
+write.csv(data, "SimulatedData.csv", row.names = F, sep = "")
 
 #Time Required for different households
 library(microbenchmark)
@@ -137,7 +139,7 @@ res<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   Hundred = {
@@ -146,7 +148,7 @@ res<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   Thousand = {
@@ -155,7 +157,7 @@ res<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   TenThousands = {
@@ -164,7 +166,7 @@ res<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   times = 5L ## specify the number of times each expression is evaluated
@@ -191,7 +193,7 @@ res_week<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   HundredFour = {
@@ -200,7 +202,7 @@ res_week<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   OneFifty = {
@@ -209,7 +211,7 @@ res_week<-microbenchmark(
                      gamma0=0, gamma2=0.1, gamma3 = -0.12,
                      beta0=c(0,-0.5,-0.5,-1.4,-1.59,-2,-2.1,-2.7),
                      beta1=-1,
-                     phi0=4)
+                     phi0=0.25)
   },
   
   
