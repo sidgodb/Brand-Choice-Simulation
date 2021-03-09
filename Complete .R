@@ -37,11 +37,6 @@ PriceMatrix <- function(StrNum, W){
   
 }
 
-
-
-
-storedata <- data.table(orangeJuice$storedemo)
-
 #Truncated Poisson
 rztpois2 = function(n, lambda, q = 1:30) {
   pztpoisson = lambda^q / (expm1(lambda) * gamma(q + 1))
@@ -104,7 +99,9 @@ PromotionEffects <- function(seed,
         b=SampleBrandChoice(beta0, beta1, price[w,])
         br = BrandNames[b]
         q=SampleQuantity(phi0)
-        data_ht[[pos]]=data.table(h=h, w=w, b=b,brandname=as.character(br) ,q=q, price_per_unit=price[w,b])
+        data_ht[[pos]]=data.table(h=h, w=w, b=b,brandname=as.character(br),
+                                  inv=inv, avg_cons=avg_cons,
+                                  q=q, price_per_unit=price[w,b])
       }
       if(i==0)
       {
@@ -117,6 +114,9 @@ PromotionEffects <- function(seed,
   return(datamain)
 }
 
+#The following  will help you in deciding which Store Number to choose to be used in the function 
+#below - for example: 2, 5, 8, 9, etc. 
+unique(orangeJuice$yx$store)
 
 data <- PromotionEffects(seed=40,H=10000, W=52, StrNum = 5,
                          inv0 = 2.5, q0 = 0, avg_cons = 0.52,
