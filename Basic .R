@@ -125,7 +125,7 @@ data <- PromotionEffects(seed=40,H=10000, W=52, StrNum = 5,
                          beta1=-1,
                          phi0=0.25)
 
-setwd("/Users/Siddharth/Documents/")
+#setwd("/Users/Siddharth/Documents/")
 write.csv(data, "SimulatedData.csv", row.names = F, sep = "")
 
 #Time Required for different households
