@@ -59,10 +59,27 @@ SampleIncidence <- function(gamma0, gamma2, gamma3, inv, avg_cons)
   return(incidence)
 }
 
+#Function to Sample Incidence with Purchase Acceleration
+SampleIncidence_PurchaseAcceleration <- function(gamma0, gamma1, gamma2, gamma3, inv, avg_cons)
+{
+  util= gamma0+gamma1*InclValue+gamma2*avg_cons+gamma3*inv
+  prob = 1/(1+exp(-util))
+  incidence=rbinom(1,1,prob=prob)
+  return(incidence)
+}
+
 #Function to Sample Quantity
 SampleQuantity <- function(phi0)
 {
   q=rztpois2(1, phi0)
+  return(q)
+}
+
+#Function to Sample Quantity - Increased Purchase Quantity WIP!!!!!!!
+SampleQuantity_PurchaseQuantity <- function(phi1, phi2, price)
+{
+   lambda = phi1+ phi2*price
+   q=rztpois2(1, lambda)
   return(q)
 }
 
@@ -74,6 +91,15 @@ SampleBrandChoice <- function(beta0,beta1,price)
   b=which(rmultinom(1,1,prob=prob)==1)
   return(b)  #Returning the position
 }
+
+#Function to Calculate sum of Utility per Household per week
+InclValue <- function(beta0,beta1,price)
+{
+  utility= beta0+beta1*price
+  sum_util=sum(utility)
+  return(sum_util)  
+}
+
 
 
 PromotionEffects <- function(seed, 
@@ -100,7 +126,6 @@ PromotionEffects <- function(seed,
         br = BrandNames[b]
         q=SampleQuantity(phi0)
         data_ht[[pos]]=data.table(h=h, w=w, b=b,brandname=as.character(br),
-                                  inv=inv, avg_cons=avg_cons,
                                   q=q, price_per_unit=price[w,b])
       }
       if(i==0)
@@ -114,16 +139,21 @@ PromotionEffects <- function(seed,
   return(datamain)
 }
 
-#The following  will help you in deciding which Store Number to choose to be used in the function 
-#below - for example: 2, 5, 8, 9, etc. 
-unique(orangeJuice$yx$store)
+#The following  are different StrNums that can be chosen from:
+#2   5   8   9  12  14  18  21  28  32  33  40  44  45  47  48  49  50  51  52  53
+#54  56  59  62  64  67  68  70  71  72  73  74  75  76  77  78  80  81  83  84  86
+#88  89  90  91  92  93  94  95  97  98 100 101 102 103 104 105 106 107 109 110 111
+#112 113 114 115 116 117 118 119 121 122 123 124 126 128 129 130 131 132 134 137
 
-data <- PromotionEffects(seed=40,H=10000, W=52, StrNum = 5,
-                         inv0 = 2.5, q0 = 0, avg_cons = 0.52,
-                         gamma0=0, gamma2=0.1, gamma3 = -0.12,
-                         beta0=c(0,-0.5,-0.72,-1.42,-1.59,-2,-2.1,-2.7),
-                         beta1=-1,
-                         phi0=0.25)
+data <- PromotionEffects(seed=40,H=10000, W=50, StrNum = 5,
+                                          inv0 = 2.5, q0 = 0, avg_cons = 0.52,
+                                          gamma0=0.78, gamma2=0.12, gamma3 = -0.10,  #Gamma3 is observable.. how to interpret
+                                          beta0=c(1,1.2,1.3,2,2.2,0.8,1.4,1.3), #RefLevel = Tropicana Premium 
+                                          beta1=-1.25,
+                                          phi0=0.8)
+
+
+
 
 #setwd("/Users/Siddharth/Documents/")
 write.csv(data, "SimulatedData.csv", row.names = F, sep = "")
