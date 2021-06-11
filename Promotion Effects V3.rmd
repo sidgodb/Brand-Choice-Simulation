@@ -1,0 +1,376 @@
+---
+title: "Dynamic Promotion Effects -- Fake Data Generation Using R"
+author: "Siddharth Godbole and Daniel Guhl"
+date: "13.05.2021"
+output: html_document
+bibliography: literature.bib
+fontsize: 11pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1 Introduction
+
+This report summarizes how the data simulation for dynamics promotion effects works. The main functions implement the data generating process as explained in @neslin2009 In particular, three main household decisions in FMCG categories are included: When (purchase incidence), what (brand choice), and how much to buy (quantity choice). The main output is a simulated dataset that resembles real scanner data. For more information, see @neslin2009 [pp. 181-182].
+
+```{r packages, echo=FALSE}
+library("data.table")
+library("mvtnorm")
+library("bayesm")
+library("ggplot2")
+```
+
+## 2 Components of Data Generation Process 
+
+As mentioned in the introduction, the simulation includes three main components (i.e., purchase incidence, brand choice, and quantity choice) and based on @gupta1988, the probability of household $h$ buys $q$ units of the brand $b$ in week $t$ can be factored into probabilities for each of the three consumer decisions:
+$$P(Q_{hbt}=q) = P(Q_{hbt}=q|C_{ht}=b, I_{ht}=1) \times P(C_{ht}=b|I_{ht}=1) \times P(I_{ht}=1)$$
+
+$P(I_{ht}=1)$ is the probability that household $h$ buys the product category of interest in week $t$ (incidence). $P(C_{ht}=b|I_{ht}=1)$ is the probability (conditional on purchase incidence that household $h$ chooses brand $b$ in week $t$ ). Lastly,  $P(Q_{hbt}=q|C_{ht}=b, I_{ht}=1)$ is the probability (conditional on purchase incidence and brand choice) that household $h$ buys $q_{hbt}$ units of brand $b$ in week $t$ (quantity). We will present and discuss each component next. 
+
+Furthermore, as we are interested in simulating dynamic promotion effects, several inter-temporal processes are implemented that link consumers' decisions over time. In the current version of the code, dynamics effects because of inventory, reference-prices, and brand loyalty are included. We present and discuss these dynamic components at the end of the section.
+
+### 2.1 Purchase Incidence 
+
+The purchase incidence of the household (i.e., whether a particular product category is bought in a given week) is driven by three factors: inclusive value, average consumption, and inventory. The equations below show the $\mathit{Utility\_of\_Incidence}$ in week $t$:
+$$
+\mathit{Utility\_of\_Incidence}_{ht} = \gamma_{0h} + \gamma_{1h} \cdot \mathit{InclValue}_{ht} + \gamma_{2h} \cdot \overline{\mathit{CONS}}_h + \gamma_{3h} \cdot \mathit{INV}_{ht},
+$$
+
+where $InclValue_{ht}$ is the maximum expected utility from buying a brand in week $t$, $\overline{CONS}_h$ is household's average weekly consumption, $INV_{ht}$ is the household's product inventory at the beginning of week $t$. 
+
+The equation for $\mathit{Utility\_of\_Incidence}$ has four (household-specific) parameters $\gamma_{0h}$, $\gamma_{1h}$, $\gamma_{2h}$, and $\gamma_{3h}$. $\gamma_{0h}$ is the intercept that sets the baseline utility for purchase incidence. $\gamma_{1h} > 0$ implies households accelerate their purchasing decision in weeks with higher expected utility from brand choice. $\gamma_{2h} > 0$  implies households with higher consumption rates should purchase more often, and $\gamma_{3h} < 0$ means that larger inventories decrease the necessity to buy from the category in week $t$.
+
+The probability of purchase incidence is modeled a binary logit (see @neslin2009 [p. 182]):
+$$P(I_{ht}=1) = \frac{1}{1 + e^{-\mathit{Utility\_of\_Incidence}_{ht}}}$$
+
+In `R` we sample one purchase incidence decision of household given all parameters and variables as follows:
+
+```{r SampleIncidence, echo=TRUE}
+sample_incidence = function(gamma, incl_value, avg_cons, inv) {
+  utility = gamma[1] + gamma[2] * incl_value + gamma[3] * avg_cons + 
+    gamma[4] * inv
+  return(rbinom(1, 1, prob = 1 / (1 + exp(-utility))))
+}
+```
+
+
+### 2.2 Brand Choice 
+
+After the household has decided to purchase, the subsequent question is which brand to  choose. This is driven by the utility the household will get from the available brands:
+$$
+\mathit{Utility\_of\_Brand\_Choice}_{hbt} = \beta_{0hb} + \beta_{1h} \cdot \mathit{Price}_{bt} + \beta_{2h} \cdot (\mathit{Price}_{bt} - \mathit{RefPrice}_{hbt}) + \beta_3 \cdot \mathit{Last}_{hbt}. 
+$$
+
+Three variables affect the utility of brand choice. $\mathit{Price}_{bt}$, the price of brand $b$ in week $t$, the references price, which summarizes the price knowledge about brand $b$ in week $t$ based on past purchase trips, and $\mathit{Last}_{hbt}$, a dummy variable that reflects state-dependence in brand choice.
+
+$\beta_{0hb}$ are brand constants and $\beta_1 < 0$ implies that price has a negative effect on utility. $\beta_2 < 0$ means that in case current prices are higher than the reference price, households have lower utility (e.g., sticker-shock) and $\beta_3 > 0$ leads to positive state-dependence. Alternatively, $\beta_3 < 0$ implies variety-seeking behavior. For more information, see @neslin2009 [p. 202].
+
+Assuming $EV(0, 1)$ error-terms lead to the well known multinomial logit model for the brand choice probability (conditional on purchase incidence): 
+$$P(C_{ht}=b|I_{ht}=1) = \frac{e^{{\mathit{Utility\_of\_Brand\_Choice}}_{hb't}}}{\sum^{B}_{b'=1}e^{{\mathit{Utility\_of\_Brand\_Choice}}_{b't}}}$$
+
+Note that $\mathit{InclValue}_{ht}$ is the logarithm of the denominator of the brand choice probability and the inclusion of this term in the purchase incidence model implies a nested logit framework for purchase incidence and brand choice.
+
+In `R` we sample one brand choice decision of household given all parameters and variables as follows:
+
+
+```{r SampleBrandChoice, echo=TRUE}
+sample_brand_choice = function(beta0, beta, price, refprice, last) {
+  exp_utility = exp(beta0 + beta[1] * price + beta[2] * (price - refprice) +
+                      beta[3] * last)
+  sum_exp_utility = sum(exp_utility)
+  y = c(rmultinom(1, 1, prob = exp_utility / sum_exp_utility))
+  return(list(y = y,
+              incl_value = log(sum_exp_utility),
+              b = which(y == 1)))
+}
+```
+
+
+### 2.3 Purchase Quantity 
+
+The final component of the purchase decision of the household the quantity. Quantity is assumed to be Poisson distributed. This is reasonable for categories where products are bought in $q = 1, 2, \dots, \infty$ units (e.g., yogurt, juice, $\dots$) rather than continuous quantities (e.g., 500 g of flour). The (logarithm) of the purchase rate (number of units) $\lambda_{ht}$  of household $h$ is only a function of the price for the chosen brand $b$ in week $t$:
+$$ \ln(\lambda_{ht}) = \phi_{0h} + \phi_{1h} \cdot \mathit{Price}_{hbt},$$
+
+where $\phi_{0h}$ is the base purchase rate and $\phi_{1h} < 0$ implies that price discount would increase the purchase quantity.
+
+As quantity decision is conditional on purchase incidence (and brand choice), $0$ units cannot be bought, and thus the zero truncated Poisson distribution is used. For more details, see @neslin2009 [pp. 183-184]:
+$$P(Q_{hbt} = q |C_{ht} = b, I_{ht} = 1) = \frac{\lambda_{ht}^q}{\left(e^{\lambda_{ht}}-1\right)\cdot q!}$$
+
+For sampling from this distribution in `R` once, we use the following functions:
+
+```{r SampleQuantity, echo=TRUE}
+rztpois = function(n, lambda, q = 1:30) {
+  p = lambda^q / (expm1(lambda) * gamma(q + 1))
+  return(sample(q, n, prob = p, replace = TRUE))
+}
+
+sample_quantity = function(phi, price) {
+  return(rztpois(1, exp(phi[1] + phi[2] * price))) 
+}
+```
+
+The first functions creates random draws from the zero truncated Poisson distribution, which is not included in `base R`. Note that by default, the function creates for a given $\lambda$ the probabilities for $q = 1, \dots, 30$ and then uses these probabilities to sample the quantity. If the $\lambda$-values suggest much smaller or larger value of $q$ than 30, the default value need to be adjusted accordingly.
+
+
+### 2.4. Update of Dynamic Processes
+
+Some functions contain dynamic processes, i.e., variables in $t$ that are affected by past decisions. Specifically, purchase incidence includes the dynamic variable $\mathit{INV}_{ht}$ and brand choice has $\mathit{RefPrice}_{hbt}$ and $\mathit{Last}_{hbt}$.
+
+The current inventory is the sum of the inventory in the previous week $t-1$ ($\mathit{INV}_{ht-1}$) and the past quantity purchased ($Q_{ht-1}$), minus the quantity consumed in the $t-1$:
+$$\mathit{INV}_{ht} = \mathit{INV}_{ht-1} + Q_{ht-1} - \min\!\left(\mathit{INV}_{ht}, \overline{\mathit{CONS}}_h\right)$$
+
+The last part assures that households cannot consume more than they have in the inventory. Thus, if the inventory shrinks below the household's average weekly consumption $\overline{CONS}_h$, the household consumes *only* the rest of the inventory. The inventory equation is updated at the *beginning* of each week $t$ such that $INV_{ht}$ affects the purchase incidence decision in $t$. Note that the inventory is not brand-specific.
+
+In `R` we update the inventory using the following function:
+
+```{r UpdateInventory, echo=TRUE}
+update_inventory = function(inv, q, avg_cons) {
+  return(inv + q - min(inv, avg_cons))
+}
+```
+
+For the reference price, we use *exponential smoothing* based on past prices.
+$$\mathit{RefPrice}_{hbt} = \alpha \cdot \mathit{RefPrice}_{hbt_{prev(h)}} + (1 - \alpha) \cdot \mathit{Price}_{bt_{prev(h)}}$$
+
+The reference price of brand $b$ in week $t$ depends on the past reference price of this brand as well as the true shelf price. Note that the past variables in the context of reference prices are related to the last purchase occasion. This means that households only update the reference price in case of a purchase trip, otherwise it remains the same. The carryover parameter $\alpha$ affects the *memory* of the process. In the case $\alpha= 0$, the reference is simply the price of the brand on the last purchase occasion. With $0 < \alpha < 1$, the price affects the reference price, where higher $\alpha$-values imply more stable reference prices. For details, see @neslin2009 [p. 215].
+
+The following `R`-function updates the reference price:
+
+```{r UpdateRefPrice, echo=TRUE}
+update_refprice = function(price, refprice, alpha) {
+  return(alpha * refprice + (1 - alpha) * price)
+}
+```
+
+The last dynamic construct is brand loyalty in the brand choice model via $\mathit{Last}_{hbt}$:
+
+$$
+\mathit{Last}_{hbt} = 
+\begin{cases}
+1, \text{ if household } h \text { bought brand } b \text{ on the last purchase occassion},\\
+0, \text{ otherwise}
+\end{cases}
+$$
+
+In `R`, we do not need an extra function for updating this variable as the function for sampling the brand choice decision outputs the vector `y` anyway that is $1$ for the chosen brand $b$ and $0$ otherwise. We only need to save the vector until the subsequent purchase incidence happens. 
+
+
+### 2.5 Remarks
+
+As mentioned above, the dynamic construct link decisions over time. E.g., the purchased quantity affects the (future) inventory, or current prices affect the future reference prices. Besides inter-temporal relationships, there are also dependencies and effects between decisions within a week. Prices, e.g., directly affect brand choice and quantity but also indirectly influence the purchase incidence decision through the inclusive value. Thus, lower prices increase the category's utility in a given week and, therefore, make the purchase incidence c.p. more likely (i.e., purchase acceleration). 
+
+@neslin2009 discuss *additional dynamic constructs* (e.g., time-varying consumption, deceleration due to consumer expectation, or time-varying price sensitivities due to promotional activities) that we consider implementing in future versions of the simulation code.
+
+
+## 3. Prices, Parameters and Initial Values
+
+The main function for the simulation will create fake data for all consumer decisions across multiple weeks, but as input (heterogeneous) *parameters* and (exogenous) *marketing-mix* variables are necessary. Furthermore, all dynamic constructs need *initial values* to start the processes.
+
+The main function for simulation that we present below needs these quantities as input. We added several functions for creating parameters, prices, and initial values for the user's convenience.
+
+For the *prices*, we utilize the price time-series for refrigerated orange juices (64 oz) from the Dominick's Finer Foods data included in the `bayesm` package. The following `R` function allows specifying the number of weeks `W` and brands `B`, with default values $100$ and $8$, respectively.
+
+```{r GetPrices, echo=TRUE}
+get_oj_prices = function(W = 100, B = 8) {
+  data("orangeJuice")
+  oj = data.table(orangeJuice$yx)
+  
+  stopifnot(W <= 110)
+  
+  # only 64 oz package sizes, but prices are per oz.
+  prices64 = oj[store == 2 & brand == 1, .(week = 1:.N,
+                                           trp = price1, fn = price3, 
+                                           tr = price4, mm = price5, 
+                                           ch = price7, tf = price8, 
+                                           fg = price9, dm = price10)]
+  prices64 = prices64[, lapply(.SD, function(x) round(64 * x, 2)), 
+                      keyby = week]
+  
+  return(as.matrix(prices64[week <= W, 2:(B + 1)]))
+}
+```
+
+The output of the function is a $W \times B$-matrix of price and would look as follows: 
+
+```{r Prices, echo=TRUE}
+prices = get_oj_prices() 
+head(prices)
+```
+
+The following function takes in different parameter vectors $\gamma$, $\beta$, and $\phi$, as well as the value for $\mathit{\overline{\mathit{CONS}}}$ and $\alpha$ as the input and creates a matrix of (household) specific *parameters* ($\theta$) for the chosen number of households $H$. Additionally, with the `het` flag, heterogeneity can be added to data simulation. If `het=FALSE`, all consumers have the same parameters (but the output is still a matrix). If `het=TRUE`, there is heterogeneity is introduced via independent normal distributions where the standard deviation is half of the absolute value for each parameter. There are two exceptions: 1) $\alpha$ is always homogeneous and 2) for $\mathit{\overline{\mathit{CONS}}}$ we use a lognormal distribution to ensure strictly positive values.
+
+```{r GetParameters, echo=TRUE}
+get_het_paramaters = function(gamma = c(0.3, 0, 0, 0),
+           beta = c(1.0, 1.2, 1.3, 2.0, 2.2, 0.8, 1.4, 1.3, 
+                    -1.5, 0, 0),
+           phi = c(-0.2, 0), 
+           avg_cons = log(0.5),
+           alpha = 0,
+           het = TRUE,
+           H = 100) {
+    
+    mu = c(gamma, beta, phi, avg_cons)
+    sigma = ifelse(het, 1, 0) * diag((0.5 * abs(mu))^2)
+    theta = rmvnorm(H, mean = mu, sigma = sigma)
+    theta[, dim(theta)[2]] = exp(theta[, dim(theta)[2]])
+    theta = cbind(theta, alpha)
+    
+    
+    colnames(theta) = c(paste0("gamma_", seq.int(gamma)-1), 
+                        paste0("beta_0", seq.int(length(beta) - 3)), 
+                        paste0("beta_", seq.int(3)), 
+                        paste0("phi_", seq.int(phi)), 
+                        "avg_cons", "alpha")
+    return(theta)
+  }
+```
+
+The output of the function is a $H \times K$-matrix of parameters, where $K$ is the sum of the number of parameters in $\gamma$, $\beta$, $\phi$, and $\alpha$ and would look as follows: 
+
+```{r Parameters, echo=TRUE}
+theta = get_het_paramaters() 
+head(theta)
+```
+
+Please note, that based on our current specification of the simulation, $\gamma$ has 4 and $\phi$ has 2 parameters, but the length of $\beta$ depends on the number of brands $B$ in the simulation (i.e., $B + 3$). Thus $K = 4 + (B + 3) + 2 + 1 + 1 = B + 10$. 
+
+Again, the function is only for the user's convenience who can pass into the main simulation function an arbitrary matrix of parameters. The only important restriction is the order of the parameters in the column of the output matrix. 
+
+*Initial values* are tricky to specify. Of course, the more observations we sample for a household, the less impact have the initial value. Ideally, we would know the values in the *steady-state* of the dynamic system, but this is difficult to derive. Another solution is to use reasonable random values to start the dynamic variables. Note that the "quality" of the initial values depends on the prices and the household parameters. Therefore, we implemented a function that creates a household-specific list with starting values that can be passed to the simulation. 
+
+```{r GetInits, echo=TRUE}
+get_inits = function(prices, theta, seed = 666) {
+  H = nrow(theta)
+  B = ncol(prices)
+  if (is.null(seed)) set.seed(seed)
+  phi = colMeans(theta[, (B + 8):(B + 9)])
+  inits = NULL 
+  for (h in 1:H) {
+    inits[[h]] = list(last = c(rmultinom(1, 1, prob = rep(1 / B, B))),
+                      refprice = colMeans(prices[sample(10, 3), ]),
+                      inv = rpois(1, exp(phi[1] + phi[2] * mean(prices)) + 1))
+  }
+  return(inits)
+}
+```
+
+Nevertheless, to mitigate any effect of the starting values, we encourage the user to add additional weeks at the beginning of the simulation as *burn-in*. E.g., if the user wants to generate a dataset with 52 weeks, we recommend adding the same number of weeks as burn-in (i.e., simulate twice as many weeks). 
+
+## 4. Data Simulation
+
+The following `R` function `create_fake_data` combines all steps mentioned above and loops for each household over all weeks. The function has 3 mandatory inputs: a $W \times B$ matrix with prices, a $H \times K$ matrix of parameters and a list of length $H$ with initial values for each household (i.e., vectors of length $B$ for $\mathit{RefPrice}_{hb1}$ and $\mathit{Last}_{hb1}$as well as $INV_{h1}$). Setting a seed number is optional (default is `seed = 666`) and facilitates the replicability of the results. The output of the function is a `data.table` that contains all information about the simulated dataset.
+
+```{r MainFunction, echo=TRUE}
+create_fake_data = function(prices, theta, inits, seed = 666) {
+  
+  H = nrow(theta)
+  K = ncol(theta)
+  W = nrow(prices)
+  B = ncol(prices)
+  if (is.null(seed)) seed = sample(1000, 1)
+  
+  data_h = NULL
+  pos = 1
+  for (h in seq.int(H)) {
+    # split parameters for each household
+    gamma = theta[h, 1:4]
+    beta0 = theta[h, 5:(5 + B - 1)]
+    beta = theta[h, (5 + B):(5 + B + 2)]
+    phi = theta[h, (B + 8):(B + 9)]
+    avg_cons = theta[h, B + 10]
+    alpha = theta[h, B + 11]
+    
+    # get inits for each household
+    last = inits[[h]]$last
+    refprice = inits[[h]]$refprice
+    inv = inits[[h]]$inv
+    
+    set.seed(seed + h)
+    for (w in seq.int(W)) {
+      # brand choice first, as we need to incl-value for purchase incidence
+      bc = sample_brand_choice(beta0 = beta0, beta = beta, price = prices[w,], 
+                               refprice = refprice, last = last)
+      
+      # purchase incidence
+      i = sample_incidence(gamma = gamma, incl_value = bc$incl_value, 
+                           avg_cons = avg_cons, inv = inv)
+      
+      if (i == 1) { 
+        # quantity (and brand choice) conditional on purchase
+        b = bc$b
+        q = sample_quantity(phi = phi, price = prices[w, b])
+        
+        # save data
+        data_h[[pos]] = data.table(household = h, week = w, brand = b, 
+                                   quantity = q, price = prices[w, b])
+        
+        # update last and refprice only in case of purchase
+        refprice = update_refprice(refprice = refprice, 
+                                   price = prices[w, ], 
+                                   alpha = alpha)
+        last = bc$y
+        
+        # update pos
+        pos = pos + 1
+      } else {
+        q = 0
+      }
+      # update inventory in each week
+      inv = update_inventory(inv, q, avg_cons)
+    }
+  }
+  data = rbindlist(data_h)
+  return(copy(data))
+}
+```
+
+Using the function is straight-forward. For the purpose of this tutorial, we create data for $H = 100$ households using prices for $B=5$ brands and $W=104$ weeks.
+
+
+```{r HowToGuide, echo=TRUE}
+prices = get_oj_prices(W = 104, B = 5)
+theta = get_het_paramaters(gamma = c(0.3, 0, 0, 0),
+                           beta = c(0.5, 2.0, 1.2, 0.8, 1.3, -1.5, 0, 0),
+                           phi = c(-0.2, 0), 
+                           avg_cons = log(0.5),
+                           alpha = 0,
+                           het = TRUE,
+                           H = 1000)
+inits = get_inits(prices = prices, theta = theta)
+
+data = create_fake_data(prices, theta, inits)
+```
+
+For the above prices, parameters, initial values, and seed number the resulting dataset has `r nrow(data)` observations. Remember, that we simulated $H=100$ households, hence most households purchase approximately every other week.
+
+The following output shows the first five purchases of household $1$. In the third week, the household buys one unit of brand $5$ for a price of \$$2.93$. One week later, the household switches to brand $2$, but this time buys $2$ units. The household has no purchase in this category in week $5$ $\dots$
+
+```{r DataDisplay, echo=FALSE}
+data[household == 1][1:5]
+```
+
+Aggregating all purchases on the brand/week-level allows us to create scatterplots in log-log-space and depict the corresponding demand functions.
+
+```{r AggValues, echo=TRUE}
+data_agg = data[, .(quantity = sum(quantity), price = mean(price)), keyby = .(brand, week)]
+
+ggplot(data_agg, aes(y = log(quantity), x = log(price))) + 
+  geom_point() + theme_minimal() + geom_smooth(method = "lm") + 
+  facet_wrap(~as.factor(brand), ncol = 3)
+```
+
+Demand is downward sloping and the corresponding elasticities appear to be reasonable.
+
+```{r Elast, echo=TRUE}
+data_agg[, .(elast = coef(lm(log(quantity) ~ log(price)))[2]), keyby = brand]
+```
+
+## 5 Epilog
+
+All functions are included in the `R`-script `promo_dyn_sim.R`. Please give it a try and have fun simulating data.
+
+For further questions, please reach out to godboles@hu-berlin.de or daniel.guhl@hu-berlin.de.
+
+## References 
