@@ -61,3 +61,110 @@ model_pd <- glm(PD~weeks_since_purch, data=deff2, family="binomial")
 summary(model_pd)
 deff2[,.(Mean_TAE=mean(weeks_since_purch),Mean_PD=mean(PD)),by=h][,plot(Mean_TAE, Mean_PD)]
 deff2[,mean(PD),by=h][,hist(V1)]
+
+#### for Quantity and inventory
+library(data.table)
+emdf <- CJ(h=1:H, w=1:W)
+data_effects_4 <- data
+data_effects_4[,w_1 := shift(w), by=h]
+data_effects_4[,wk_diff:= w-w_1]
+
+#data_effects_4[,q_1 := shift(q), by=h]
+#data_effects_4[,cons:=q_1/wk_diff]   #### total quantity divided by the week gap
+
+deff2 = merge(emdf, data_effects_4, by = c("h", "w"), all.x = TRUE)
+setkey(deff2, h, w)
+deff2[, w_1 := nafill(w_1, type = "nocb"), by = h]
+deff2[, weeks_since_purch := w - w_1]
+
+deff3 = deff2[weeks_since_purch > 0]
+deff3 = deff3[, inv:=NA]
+deff4 = deff2[weeks_since_purch ==0]
+deff4 = deff4[, inv:=2.5]
+
+deff5= rbind(deff3, deff4)
+deff5= deff5[order(h,w)]
+deff5[, avg_cons:= 0.5, by=h]
+
+
+lastpur <- deff5[,c(1,2,3,5,9,10,11)]
+lastpur$cons_q <- lastpur$q-lastpur$avg_cons
+lastpur[,cons_q:=nafill(cons_q, type="const", fill=-0.5), by=h]
+lastpur1<-lastpur %>% group_by(h) %>% 
+  mutate(inv = accumulate(cons_q, ~ .x + .y, .init = 2.5)[-1]) 
+lastpur1$PD <- ifelse(is.na(lastpur1$b),0,1)
+model_pd <- glm(PD~1+inv+weeks_since_purch, data=lastpur1, family="binomial")
+summary(model_pd)
+
+#deff2[, inv:=q, by=h]
+#deff2[ ,inv:=nafill(inv, type="const", fill=0), by=h]
+
+#Following not needed
+
+#d_q <- data_effects_4[ ,q_1 := shift(q), by=h]
+#data_effects_4[,acons:=0.5]
+#deff[, inv:= q+q_1]
+#deff2[, inv := nafill(inv, type="locf"), by=h]
+#deff2[, avg_cons := nafill(avg_cons, type="nocb"), by=h]
+#deff2[, q_1 := nafill(q_1, type = "locf"), by = h]
+#deff2[, inv_new:= inv - shift(avg_cons), by=h]
+
+
+
+### avg cons inventory ####
+avgin <- deff2[,c(1,2,5,10,11)]
+avgin <- data.frame(avgin)
+avgin[,inv_new:=shift(inv)-q,by=h]
+
+
+avg = subset(avgin, avgin$h==3)
+matrix(avg1)<- avg1[,5:4]
+avgin=data.table(avgin)
+avgin[,inv_new := accumulate(inv,`-`)-avg_cons, by=h]
+
+apply(avgin,1,function(d)f(d["inv"],d["avg_cons"]))
+
+f <- function(inv, avg_cons)
+{
+  if(is.na(inv[i])){diff=0}
+  else{
+  diff[i]=inv[i-1]-avg_cons[i]
+  inv[i]=diff[i]
+  }
+}
+
+for(i in 4:nrow(avg))
+{
+  if(is.na(avg$inv[i-1])){diff=0}
+  else{
+    diff=max(avg$avg_cons[i],avg$inv[i-1]-avg$avg_cons[i])
+    avg$inv[i]=diff
+  }
+}
+
+
+### Repeated purchases
+library(data.table)
+library(dplyr)
+
+RepeatPurchases<-function(H, W, data){
+colnames(data) <- c("h","w","b","q","p")
+emdf <- CJ(h=1:H, w=1:W)
+data[,b_1 := shift(b), by=h]
+data <- subset(data, !is.na(data$b_1))
+data$RepeatPurchase <- ifelse(data$b==data$b_1, 1, 0)
+RepeatInstances <- data %>% group_by(h) %>% summarize(RI = sum(RepeatPurchase),
+                                                       TP = length(h))
+RepeatInstances$Ratio<- (RepeatInstances$RI*100)/RepeatInstances$TP
+return(mean(RepeatInstances$Ratio))
+}
+
+RepeatPurchases(100,100,data = data)
+
+beta3 = seq(from = 0, to = 1, by = 0.5)
+ratio <- c()
+for(i in beta3)
+{
+  ratio=c(ratio,i)
+}
+

@@ -145,9 +145,9 @@ PromotionEffects <- function(seed,
 #88  89  90  91  92  93  94  95  97  98 100 101 102 103 104 105 106 107 109 110 111
 #112 113 114 115 116 117 118 119 121 122 123 124 126 128 129 130 131 132 134 137
 
-data <- PromotionEffects(seed=40,H=10000, W=50, StrNum = 5,
+data <- PromotionEffects(seed=40,H=1000, W=50, StrNum = 5,
                                           inv0 = 2.5, q0 = 0, avg_cons = 0.52,
-                                          gamma0=0.78, gamma2=0.12, gamma3 = -0.10,  #Gamma3 is observable.. how to interpret
+                                          gamma0=0.78, gamma2=0.12, gamma3 = -0.06,  #Gamma3 is observable.. how to interpret
                                           beta0=c(1,1.2,1.3,2,2.2,0.8,1.4,1.3), #RefLevel = Tropicana Premium 
                                           beta1=-1.25,
                                           phi0=0.8)
